@@ -4,6 +4,7 @@ import com.corelationinc.script.*;
 
 import java.io.PrintStream;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.Iterator;
 
 public class MasterCardCreditReportingUpdate {
@@ -44,19 +45,73 @@ public class MasterCardCreditReportingUpdate {
         xml.setXMLWriter(os);
         xml.putStartDocument();
         xml.putBatchQuery(postingDate);
+        xml.putSequence();
+        xml.putTransaction();
 
         //Your method calls go here
-
+        Serial [] cards = getMasterCards();
+        updateMasterCardRecords(cards);
 
         //end the XML document
-        xml.put();
+        xml.put(); //end Transaction
+        xml.put(); //end Sequence
+        xml.put(); // end Batch Query
         xml.putEndDocument();
+    }
+
+    private Serial[] getMasterCards () throws Exception {
+
+        String sql = " SELECT\n" +
+                     "    LOAN.SERIAL\n" +
+                     " FROM\n" +
+                     "    CORE.LOAN LOAN\n" +
+                     " WHERE\n" +
+                     "    LOAN.TYPE_SERIAL = '70' AND LOAN.CLOSE_DATE IS NULL AND LOAN.CHARGE_OFF_DATE IS NULL";
+        PreparedStatement ps = connection.prepareStatement(sql, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+        ResultSet rs = ps.executeQuery();
+        rs.last();
+        Serial cardList [];
+        cardList = new Serial[rs.getRow()];
+        rs.beforeFirst();
+        while(rs.next()) {
+            Serial s = Serial.get(rs,1);
+            cardList[rs.getRow() -1] = s;
+        }
+        return cardList;
+    }
+
+    private void updateMasterCardRecords(Serial [] cardList) throws Exception{
+       String option = "18";
+        for (Serial serial : cardList) {
+
+            xml.putStep();
+            {
+                xml.putRecord();
+                {
+                    xml.putOption("operation", "U");
+                    xml.put("tableName", "LOAN");
+                    xml.put("targetSerial", serial);
+                    xml.putOption("includeTableMetadata", "N");
+                    xml.putOption("includeColumnMetadata", "N");
+                    xml.putOption("includeRowDescriptions", "Y");
+                    xml.put("field"); // <field>
+                    {
+                        xml.put("columnName", "CRED_REP_ACCOUNT_TYPE");
+                        xml.putOption("operation", "S");
+                        xml.put("newContents", option);
+                    }
+                    xml.put(); // </field>
+                }
+                xml.put();//end Record
+            }
+            xml.put(); //end Step
+        }
     }
     //"Main" method for debugging in your IDE, this is not what gets ran in Keystone
     public static void main(String[] args) throws Throwable {
-        String javaClass = "-javaClass=" + "com.blueeaglecreditunion.script.EmploymentUpdateBatchScript"; // class path name of the batch script you want to run
+        String javaClass = "-javaClass=" + "com.blueeaglecreditunion.script.MasterCardCreditReportingUpdate"; // class path name of the batch script you want to run
         String javaMethod = "-javaMethod=" + "runScript"; // method to call in the script class
-        String database = "-database=" + "D0062T04"; // database to read from XX is the client number and YYY is the env ex: D0035T00
+        String database = "-database=" + "D0062T00"; // database to read from XX is the client number and YYY is the env ex: D0035T00
         String databaseHome = "-databaseHome="; // can set this if you need to read in a file into your program
         String jdbcDriver = "-jdbcDriver=" + "com.ibm.db2.jcc.DB2Driver"; // DB2 driverCoachella2017
         String jdbcURLPrefix = "-jdbcURLPrefix=" + "jdbc:db2://208.69.139.109:50000"; // DB2 URL connection to your DB
